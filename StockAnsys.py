@@ -21,55 +21,50 @@ st.markdown("Automated AAOIFI financial ratios and Technical Analysis for Indian
 @st.cache_data
 def load_stock_list():
     try:
-        # 1. Read the CSV file you uploaded
+        # Read the CSV file you uploaded to GitHub
         df = pd.read_csv("EQUITY_L.csv")
         
-        # 2. Combine the Symbol and Name to look good in the dropdown
-        # Example: "RELIANCE - Reliance Industries Limited"
+        # Combine the Symbol and Name
         df['Display'] = df['SYMBOL'] + " - " + df['NAME OF COMPANY']
         
-        # 3. Convert that column into a Python list
+        # Convert to a list
         stock_list = df['Display'].tolist()
         
-        # 4. Add our "Custom Ticker" option to the very top!
-        final_list = ["✏️ Type Custom Ticker..."] + stock_list
-        return final_list
+        # Add our Custom option to the top
+        return ["✏️ Type Custom Ticker..."] + stock_list
         
     except Exception as e:
-        # Fallback just in case the app can't find the CSV file
-        st.error(f"Could not load stock list from CSV: {e}")
+        # Fallback if the CSV isn't found
         return [
             "✏️ Type Custom Ticker...", 
             "RELIANCE - Reliance Industries", 
-            "TCS - Tata Consultancy Services"
+            "TCS - Tata Consultancy Services",
+            "HDFCBANK - HDFC Bank"
         ]
 
 # Run the function to generate the list
 POPULAR_STOCKS = load_stock_list()
-]
 
 # --- MAIN PAGE SEARCH INTERFACE ---
 with st.container(border=True):
-    # Adjusted column widths to make room for the dropdown
     search_col1, search_col2, search_col3, search_col4 = st.columns([2, 1, 1, 1])
 
     with search_col1:
-        # This Selectbox acts as our TradingView-style autocomplete search!
+        # This Selectbox acts as our autocomplete search
         selected_option = st.selectbox(
             "Search Company:", 
             options=POPULAR_STOCKS, 
-            index=1, # Defaults to RELIANCE
+            index=1, # Defaults to the first real stock in the list
             label_visibility="collapsed"
         )
 
     with search_col2:
-        # If they want a custom ticker, show a text box. Otherwise, hide it.
+        # Show text box only if they choose Custom
         if selected_option == "✏️ Type Custom Ticker...":
             ticker_input = st.text_input("Enter Ticker:", "RISHABH", label_visibility="collapsed").upper().strip()
         else:
-            # Extract just the ticker symbol from the dropdown (e.g., gets "RELIANCE" from "RELIANCE - Reliance Industries")
             ticker_input = selected_option.split(" - ")[0]
-            st.write("") # Blank space to keep columns aligned
+            st.write("") # Keep columns aligned
 
     with search_col3:
         exchange = st.radio("Exchange:", ("NSE", "BSE"), horizontal=True, label_visibility="collapsed")
