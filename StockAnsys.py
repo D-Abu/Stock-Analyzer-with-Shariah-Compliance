@@ -2,7 +2,6 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import requests
 
 # --- Page Config ---
 st.set_page_config(page_title="Shariah Stock Screener", layout="wide")
@@ -32,22 +31,11 @@ analyze_button = st.button("🔍 Analyze Stock", use_container_width=True, type=
 
 st.divider()
 
-# --- NEW: Create a "Browser Disguise" Session ---
-# This prevents Yahoo Finance from blocking our automated Python requests
-@st.cache_resource
-def get_custom_session():
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-    })
-    return session
-
 # --- Fetch Data Functions ---
+# We have removed the custom session here. Yfinance handles it natively now!
 @st.cache_data(ttl=3600) 
 def fetch_financials(ticker_symbol):
-    session = get_custom_session()
-    # Pass our custom session into the Ticker object
-    stock = yf.Ticker(ticker_symbol, session=session)
+    stock = yf.Ticker(ticker_symbol)
     
     try:
         info = stock.info
@@ -69,9 +57,7 @@ def fetch_financials(ticker_symbol):
 @st.cache_data(ttl=3600)
 def fetch_price_data(ticker_symbol):
     try:
-        session = get_custom_session()
-        # Pass our custom session into the Ticker object
-        stock = yf.Ticker(ticker_symbol, session=session)
+        stock = yf.Ticker(ticker_symbol)
         hist_daily = stock.history(period="max")
         hist_weekly = stock.history(period="2y", interval="1wk")
         return hist_daily, hist_weekly
@@ -87,7 +73,7 @@ if analyze_button:
         
         # --- Error Handling ---
         if bs is None or bs.empty:
-            st.error(f"❌ Could not fetch the Balance Sheet for {yf_ticker}. Yahoo Finance might still be blocking the request, or data is missing for this specific ticker.")
+            st.error(f"❌ Could not fetch the Balance Sheet for {yf_ticker}. Please ensure the ticker is correct for the selected exchange.")
         elif financials is None or financials.empty:
             st.error(f"❌ Could not fetch the Income Statement (Financials) for {yf_ticker}.")
         elif hist_daily is None or hist_daily.empty:
