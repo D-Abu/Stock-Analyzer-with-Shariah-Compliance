@@ -49,11 +49,21 @@ if st.sidebar.button("Analyze Stock"):
         info, bs, financials = fetch_financials(yf_ticker)
         hist_daily, hist_weekly = fetch_price_data(yf_ticker)
         
-        # Check if info is valid and dataframes aren't empty
-        if not isinstance(info, dict) or "symbol" not in info or bs.empty or financials.empty or hist_daily.empty:
-            st.error("❌ Could not fetch complete data. Please check the ticker symbol or try a different exchange.")
+       # --- Diagnostic Error Handling ---
+        if info is None or not isinstance(info, dict) or "symbol" not in info:
+            st.error(f"❌ Could not fetch Company Info for {yf_ticker}. The ticker might be invalid or Yahoo Finance is blocking the request.")
+        elif bs is None or bs.empty:
+            st.error(f"❌ Could not fetch the Balance Sheet for {yf_ticker}. Yahoo Finance might not have this data for this specific company.")
+        elif financials is None or financials.empty:
+            st.error(f"❌ Could not fetch the Income Statement (Financials) for {yf_ticker}. Yahoo Finance might not have this data.")
+        elif hist_daily is None or hist_daily.empty:
+            st.error(f"❌ Could not fetch Historical Price data for {yf_ticker}.")
         else:
+            # Everything fetched successfully! Proceed with analysis.
             current_price = hist_daily['Close'].iloc[-1]
+            st.subheader(f"{info.get('longName', ticker_input)} ({yf_ticker}) - Current Price: ₹{current_price:.2f}")
+            
+            # ... (Keep the rest of your Step 1, Step 2, and Step 3 code exactly the same below this) ...
             st.subheader(f"{info.get('longName', ticker_input)} ({yf_ticker}) - Current Price: ₹{current_price:.2f}")
             st.write(f"**Sector:** {info.get('sector', 'N/A')} | **Industry:** {info.get('industry', 'N/A')}")
             
