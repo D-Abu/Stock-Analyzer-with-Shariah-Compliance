@@ -17,23 +17,35 @@ st.markdown("""
 st.title("🕌 BSE/NSE Premium Screener")
 st.markdown("Automated AAOIFI financial ratios and Technical Analysis for Indian equities.")
 
-# --- AUTOCOMPLETE STOCK LIST ---
-# A sample of popular Indian stocks for the autocomplete dropdown.
-# You can expand this list later by loading a CSV of all NSE/BSE symbols!
-POPULAR_STOCKS = [
-    "✏️ Type Custom Ticker...",
-    "RELIANCE - Reliance Industries", "TCS - Tata Consultancy Services",
-    "HDFCBANK - HDFC Bank", "ICICIBANK - ICICI Bank", "INFY - Infosys",
-    "SBIN - State Bank of India", "BHARTIARTL - Bharti Airtel",
-    "ITC - ITC Limited", "HINDUNILVR - Hindustan Unilever",
-    "LT - Larsen & Toubro", "BAJFINANCE - Bajaj Finance",
-    "HCLTECH - HCL Technologies", "MARUTI - Maruti Suzuki",
-    "SUNPHARMA - Sun Pharmaceutical", "TATAMOTORS - Tata Motors",
-    "TATASTEEL - Tata Steel", "KOTAKBANK - Kotak Mahindra Bank",
-    "AXISBANK - Axis Bank", "ASIANPAINT - Asian Paints",
-    "M&M - Mahindra & Mahindra", "TITAN - Titan Company",
-    "ULTRACEMCO - UltraTech Cement", "WIPRO - Wipro",
-    "BAJAJFINSV - Bajaj Finserv", "NESTLEIND - Nestle India"
+# --- AUTOCOMPLETE STOCK LIST FROM CSV ---
+@st.cache_data
+def load_stock_list():
+    try:
+        # 1. Read the CSV file you uploaded
+        df = pd.read_csv("EQUITY_L.csv")
+        
+        # 2. Combine the Symbol and Name to look good in the dropdown
+        # Example: "RELIANCE - Reliance Industries Limited"
+        df['Display'] = df['SYMBOL'] + " - " + df['NAME OF COMPANY']
+        
+        # 3. Convert that column into a Python list
+        stock_list = df['Display'].tolist()
+        
+        # 4. Add our "Custom Ticker" option to the very top!
+        final_list = ["✏️ Type Custom Ticker..."] + stock_list
+        return final_list
+        
+    except Exception as e:
+        # Fallback just in case the app can't find the CSV file
+        st.error(f"Could not load stock list from CSV: {e}")
+        return [
+            "✏️ Type Custom Ticker...", 
+            "RELIANCE - Reliance Industries", 
+            "TCS - Tata Consultancy Services"
+        ]
+
+# Run the function to generate the list
+POPULAR_STOCKS = load_stock_list()
 ]
 
 # --- MAIN PAGE SEARCH INTERFACE ---
