@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 # --- Page Config ---
 st.set_page_config(page_title="Shariah Stock Screener", layout="wide", initial_sidebar_state="collapsed")
 
-# --- Custom CSS for subtle polish ---
+# --- Custom CSS ---
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem; padding-bottom: 2rem; }
@@ -17,17 +17,52 @@ st.markdown("""
 st.title("🕌 BSE/NSE Premium Screener")
 st.markdown("Automated AAOIFI financial ratios and Technical Analysis for Indian equities.")
 
+# --- AUTOCOMPLETE STOCK LIST ---
+# A sample of popular Indian stocks for the autocomplete dropdown.
+# You can expand this list later by loading a CSV of all NSE/BSE symbols!
+POPULAR_STOCKS = [
+    "✏️ Type Custom Ticker...",
+    "RELIANCE - Reliance Industries", "TCS - Tata Consultancy Services",
+    "HDFCBANK - HDFC Bank", "ICICIBANK - ICICI Bank", "INFY - Infosys",
+    "SBIN - State Bank of India", "BHARTIARTL - Bharti Airtel",
+    "ITC - ITC Limited", "HINDUNILVR - Hindustan Unilever",
+    "LT - Larsen & Toubro", "BAJFINANCE - Bajaj Finance",
+    "HCLTECH - HCL Technologies", "MARUTI - Maruti Suzuki",
+    "SUNPHARMA - Sun Pharmaceutical", "TATAMOTORS - Tata Motors",
+    "TATASTEEL - Tata Steel", "KOTAKBANK - Kotak Mahindra Bank",
+    "AXISBANK - Axis Bank", "ASIANPAINT - Asian Paints",
+    "M&M - Mahindra & Mahindra", "TITAN - Titan Company",
+    "ULTRACEMCO - UltraTech Cement", "WIPRO - Wipro",
+    "BAJAJFINSV - Bajaj Finserv", "NESTLEIND - Nestle India"
+]
+
 # --- MAIN PAGE SEARCH INTERFACE ---
 with st.container(border=True):
-    search_col1, search_col2, search_col3 = st.columns([2, 1, 1])
+    # Adjusted column widths to make room for the dropdown
+    search_col1, search_col2, search_col3, search_col4 = st.columns([2, 1, 1, 1])
 
     with search_col1:
-        ticker_input = st.text_input("Search Company (e.g., RELIANCE, TCS, M&M):", "TCS", label_visibility="collapsed").upper().strip()
+        # This Selectbox acts as our TradingView-style autocomplete search!
+        selected_option = st.selectbox(
+            "Search Company:", 
+            options=POPULAR_STOCKS, 
+            index=1, # Defaults to RELIANCE
+            label_visibility="collapsed"
+        )
 
     with search_col2:
-        exchange = st.radio("Exchange:", ("NSE", "BSE"), horizontal=True, label_visibility="collapsed")
+        # If they want a custom ticker, show a text box. Otherwise, hide it.
+        if selected_option == "✏️ Type Custom Ticker...":
+            ticker_input = st.text_input("Enter Ticker:", "RISHABH", label_visibility="collapsed").upper().strip()
+        else:
+            # Extract just the ticker symbol from the dropdown (e.g., gets "RELIANCE" from "RELIANCE - Reliance Industries")
+            ticker_input = selected_option.split(" - ")[0]
+            st.write("") # Blank space to keep columns aligned
 
     with search_col3:
+        exchange = st.radio("Exchange:", ("NSE", "BSE"), horizontal=True, label_visibility="collapsed")
+
+    with search_col4:
         analyze_button = st.button("🔍 Analyze Stock", use_container_width=True, type="primary")
 
 # Ticker Cleaning
@@ -58,15 +93,11 @@ def fetch_price_data(ticker_symbol):
 
 # --- Plotting Function ---
 def create_price_chart(hist_daily, ticker_name):
-    # Take the last 252 trading days (1 year) for a clean chart
     df_chart = hist_daily.tail(252)
-    
     fig = go.Figure()
     
-    # Price Line
     fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['Close'], mode='lines', name='Close Price', line=dict(color='#2962FF', width=2)))
     
-    # Moving Averages
     if 'SMA_50' in df_chart.columns:
         fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['SMA_50'], mode='lines', name='50 DMA', line=dict(color='#FF6D00', width=1.5, dash='dot')))
     if 'SMA_200' in df_chart.columns:
@@ -97,7 +128,6 @@ if analyze_button:
         elif hist_daily is None or hist_daily.empty:
             st.error(f"❌ Could not fetch Historical Price data for {yf_ticker}.")
         else:
-            # --- Pre-Calculate Math ---
             current_price = hist_daily['Close'].iloc[-1]
             hist_daily['SMA_50'] = hist_daily['Close'].rolling(window=50).mean()
             hist_daily['SMA_200'] = hist_daily['Close'].rolling(window=200).mean()
@@ -105,9 +135,7 @@ if analyze_button:
             company_name = info.get('longName', ticker_input) if isinstance(info, dict) else ticker_input
             sector = info.get('sector', 'Unknown') if isinstance(info, dict) else 'Unknown'
             industry = info.get('industry', 'Unknown') if isinstance(info, dict) else 'Unknown'
-            market_cap = info.get('marketCap', 0) if isinstance(info, dict) else 0
             
-            # --- DASHBOARD HEADER ---
             head_col1, head_col2 = st.columns([3, 1])
             with head_col1:
                 st.markdown(f"## {company_name} ({yf_ticker})")
@@ -115,7 +143,6 @@ if analyze_button:
             with head_col2:
                 st.markdown(f"<h2 style='text-align: right; color: #00C853;'>₹{current_price:,.2f}</h2>", unsafe_allow_html=True)
             
-            # --- ROW 1: Chart & Returns ---
             row1_col1, row1_col2 = st.columns([2, 1])
             
             with row1_col1:
@@ -135,7 +162,6 @@ if analyze_button:
                     st.divider()
                     st.metric("3-Year Return", f"{ret_3y:.2f}%" if ret_3y else "N/A")
 
-            # --- ROW 2: Technical Indicators ---
             with st.container(border=True):
                 st.markdown("#### ⚙️ Technical Analysis")
                 t_col1, t_col2, t_col3, t_col4 = st.columns(4)
@@ -154,11 +180,10 @@ if analyze_button:
                 dist_ath = ((current_price / ath) - 1) * 100
 
                 t_col1.metric("DMA Crossover (50 vs 200)", crossover)
-                t_col2.metric("Weekly Trend", wema_status)
-                t_col3.metric("Distance from 52W High", f"{dist_52w:.2f}%")
-                t_col4.metric("Distance from ATH", f"{dist_ath:.2f}%")
+                t_col2.metric("Weekly Trend (30 WEMA)", wema_status)
+                t_col3.metric("vs 52W High", f"{dist_52w:.2f}%")
+                t_col4.metric("vs ATH", f"{dist_ath:.2f}%")
 
-            # --- ROW 3: Shariah Compliance ---
             with st.container(border=True):
                 st.markdown("#### ⚖️ AAOIFI Financial Ratios")
                 try:
