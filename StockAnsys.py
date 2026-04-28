@@ -2,56 +2,48 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
 
 # --- Page Config ---
-st.set_page_config(page_title="Shariah Stock Screener", layout="wide")
-st.title("🕌 BSE/NSE Shariah & Technical Screener")
+st.set_page_config(page_title="Shariah Stock Screener", layout="wide", initial_sidebar_state="collapsed")
+
+# --- Custom CSS for subtle polish ---
+st.markdown("""
+    <style>
+    .block-container { padding-top: 2rem; padding-bottom: 2rem; }
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("🕌 BSE/NSE Premium Screener")
 st.markdown("Automated AAOIFI financial ratios and Technical Analysis for Indian equities.")
 
 # --- MAIN PAGE SEARCH INTERFACE ---
-st.markdown("### Search Stock")
+with st.container(border=True):
+    search_col1, search_col2, search_col3 = st.columns([2, 1, 1])
 
-search_col1, search_col2 = st.columns([3, 1])
+    with search_col1:
+        ticker_input = st.text_input("Search Company (e.g., RELIANCE, TCS, M&M):", "TCS", label_visibility="collapsed").upper().strip()
 
-with search_col1:
-    ticker_input = st.text_input("Enter Ticker Symbol (e.g., RELIANCE, TCS, M&M):", "TCS").upper().strip()
+    with search_col2:
+        exchange = st.radio("Exchange:", ("NSE", "BSE"), horizontal=True, label_visibility="collapsed")
 
-with search_col2:
-    exchange = st.radio("Select Exchange:", ("NSE", "BSE"), horizontal=True)
+    with search_col3:
+        analyze_button = st.button("🔍 Analyze Stock", use_container_width=True, type="primary")
 
 # Ticker Cleaning
 base_symbol = ticker_input.split('.')[0]
-
-if exchange == "NSE":
-    yf_ticker = f"{base_symbol}.NS"
-else:
-    yf_ticker = f"{base_symbol}.BO"
-
-analyze_button = st.button("🔍 Analyze Stock", use_container_width=True, type="primary")
-
-st.divider()
+yf_ticker = f"{base_symbol}.NS" if exchange == "NSE" else f"{base_symbol}.BO"
 
 # --- Fetch Data Functions ---
-# We have removed the custom session here. Yfinance handles it natively now!
 @st.cache_data(ttl=3600) 
 def fetch_financials(ticker_symbol):
     stock = yf.Ticker(ticker_symbol)
-    
-    try:
-        info = stock.info
-    except Exception:
-        info = {}
-        
-    try:
-        bs = stock.balance_sheet
-    except Exception:
-        bs = pd.DataFrame()
-        
-    try:
-        financials = stock.financials
-    except Exception:
-        financials = pd.DataFrame()
-        
+    try: info = stock.info
+    except Exception: info = {}
+    try: bs = stock.balance_sheet
+    except Exception: bs = pd.DataFrame()
+    try: financials = stock.financials
+    except Exception: financials = pd.DataFrame()
     return info, bs, financials
 
 @st.cache_data(ttl=3600)
@@ -64,94 +56,92 @@ def fetch_price_data(ticker_symbol):
     except Exception:
         return None, None
 
+# --- Plotting Function ---
+def create_price_chart(hist_daily, ticker_name):
+    # Take the last 252 trading days (1 year) for a clean chart
+    df_chart = hist_daily.tail(252)
+    
+    fig = go.Figure()
+    
+    # Price Line
+    fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['Close'], mode='lines', name='Close Price', line=dict(color='#2962FF', width=2)))
+    
+    # Moving Averages
+    if 'SMA_50' in df_chart.columns:
+        fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['SMA_50'], mode='lines', name='50 DMA', line=dict(color='#FF6D00', width=1.5, dash='dot')))
+    if 'SMA_200' in df_chart.columns:
+        fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['SMA_200'], mode='lines', name='200 DMA', line=dict(color='#00C853', width=1.5, dash='dot')))
+    
+    fig.update_layout(
+        title=f"1-Year Price Trend & MAs",
+        margin=dict(l=10, r=10, t=40, b=10),
+        height=350,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128, 128, 128, 0.2)')
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128, 128, 128, 0.2)')
+    return fig
 
 # --- Application Logic ---
 if analyze_button:
-    with st.spinner(f"Fetching data for {yf_ticker}..."):
+    with st.spinner(f"Compiling dashboard for {yf_ticker}..."):
         info, bs, financials = fetch_financials(yf_ticker)
         hist_daily, hist_weekly = fetch_price_data(yf_ticker)
         
-        # --- Error Handling ---
         if bs is None or bs.empty:
-            st.error(f"❌ Could not fetch the Balance Sheet for {yf_ticker}. Please ensure the ticker is correct for the selected exchange.")
+            st.error(f"❌ Could not fetch the Balance Sheet for {yf_ticker}.")
         elif financials is None or financials.empty:
             st.error(f"❌ Could not fetch the Income Statement (Financials) for {yf_ticker}.")
         elif hist_daily is None or hist_daily.empty:
             st.error(f"❌ Could not fetch Historical Price data for {yf_ticker}.")
         else:
-            # Data fetched successfully!
+            # --- Pre-Calculate Math ---
             current_price = hist_daily['Close'].iloc[-1]
+            hist_daily['SMA_50'] = hist_daily['Close'].rolling(window=50).mean()
+            hist_daily['SMA_200'] = hist_daily['Close'].rolling(window=200).mean()
             
             company_name = info.get('longName', ticker_input) if isinstance(info, dict) else ticker_input
             sector = info.get('sector', 'Unknown') if isinstance(info, dict) else 'Unknown'
             industry = info.get('industry', 'Unknown') if isinstance(info, dict) else 'Unknown'
+            market_cap = info.get('marketCap', 0) if isinstance(info, dict) else 0
             
-            st.subheader(f"{company_name} ({yf_ticker}) - Current Price: ₹{current_price:.2f}")
-            st.write(f"**Sector:** {sector} | **Industry:** {industry}")
+            # --- DASHBOARD HEADER ---
+            head_col1, head_col2 = st.columns([3, 1])
+            with head_col1:
+                st.markdown(f"## {company_name} ({yf_ticker})")
+                st.markdown(f"**Sector:** {sector} &nbsp;|&nbsp; **Industry:** {industry}")
+            with head_col2:
+                st.markdown(f"<h2 style='text-align: right; color: #00C853;'>₹{current_price:,.2f}</h2>", unsafe_allow_html=True)
             
-            # --- STEP 1: Sector Screening ---
-            st.warning("**Step 1: Sector Screening (Manual Check Required)**\n\nEnsure this company does not derive its primary revenue from non-compliant sources like conventional banking, alcohol, or gambling.")
+            # --- ROW 1: Chart & Returns ---
+            row1_col1, row1_col2 = st.columns([2, 1])
             
-            # --- STEP 2: Financial Ratio Calculations ---
-            st.markdown("### Step 2: Financial Ratios (AAOIFI Standards)")
-            try:
-                recent_bs = bs.iloc[:, 0] 
-                recent_inc = financials.iloc[:, 0]
-                
-                total_assets = recent_bs.get("Total Assets", 0)
-                total_debt = recent_bs.get("Total Debt", 0)
-                cash_and_equiv = recent_bs.get("Cash And Cash Equivalents", 0)
-                short_term_investments = recent_bs.get("Other Short Term Investments", 0)
-                long_term_investments = recent_bs.get("Long Term Investments", 0)
-                
-                total_revenue = recent_inc.get("Total Revenue", 0)
-                interest_income = recent_inc.get("Interest Income", 0)
-                
-                total_cash_investments = cash_and_equiv + short_term_investments
-                interest_bearing_securities = short_term_investments + long_term_investments
-                
-                if total_assets > 0 and total_revenue > 0:
-                    debt_to_assets = (total_debt / total_assets) * 100
-                    cash_to_assets = (total_cash_investments / total_assets) * 100
-                    securities_to_assets = (interest_bearing_securities / total_assets) * 100
-                    interest_to_revenue = (interest_income / total_revenue) * 100
+            with row1_col1:
+                with st.container(border=True):
+                    st.plotly_chart(create_price_chart(hist_daily, ticker_input), use_container_width=True)
+            
+            with row1_col2:
+                with st.container(border=True):
+                    st.markdown("#### 📈 Historical Returns")
+                    ret_6m = ((current_price / hist_daily['Close'].iloc[-126]) - 1) * 100 if len(hist_daily) >= 126 else None
+                    ret_12m = ((current_price / hist_daily['Close'].iloc[-252]) - 1) * 100 if len(hist_daily) >= 252 else None
+                    ret_3y = ((current_price / hist_daily['Close'].iloc[-756]) - 1) * 100 if len(hist_daily) >= 756 else None
                     
-                    f_col1, f_col2, f_col3, f_col4 = st.columns(4)
-                    
-                    with f_col1:
-                        st.metric(label="Debt / Assets (< 33%)", value=f"{debt_to_assets:.2f}%")
-                    with f_col2:
-                        st.metric(label="Cash / Assets (< 33%)", value=f"{cash_to_assets:.2f}%")
-                    with f_col3:
-                        st.metric(label="Securities / Assets (< 33%)", value=f"{securities_to_assets:.2f}%")
-                    with f_col4:
-                        st.metric(label="Interest / Revenue (< 5%)", value=f"{interest_to_revenue:.2f}%")
-                            
-                    if debt_to_assets < 33 and cash_to_assets < 33 and securities_to_assets < 33 and interest_to_revenue < 5:
-                        st.success("🟢 **Financial Ratios: COMPLIANT**")
-                    else:
-                        st.error("🔴 **Financial Ratios: NON-COMPLIANT**")
-                else:
-                    st.warning("Financial data (Assets/Revenue) is zero or missing for this ticker.")
-                    
-            except Exception as e:
-                st.error(f"⚠️ Error calculating ratios: {e}")
+                    st.metric("6-Month Return", f"{ret_6m:.2f}%" if ret_6m else "N/A")
+                    st.divider()
+                    st.metric("12-Month Return", f"{ret_12m:.2f}%" if ret_12m else "N/A")
+                    st.divider()
+                    st.metric("3-Year Return", f"{ret_3y:.2f}%" if ret_3y else "N/A")
 
-            st.divider()
-
-            # --- STEP 3: Technical Analysis & Performance ---
-            st.markdown("### Step 3: Technical Analysis & Performance")
-            
-            try:
-                ret_6m = ((current_price / hist_daily['Close'].iloc[-126]) - 1) * 100 if len(hist_daily) >= 126 else None
-                ret_12m = ((current_price / hist_daily['Close'].iloc[-252]) - 1) * 100 if len(hist_daily) >= 252 else None
-                ret_3y = ((current_price / hist_daily['Close'].iloc[-756]) - 1) * 100 if len(hist_daily) >= 756 else None
-
-                hist_daily['SMA_50'] = hist_daily['Close'].rolling(window=50).mean()
-                hist_daily['SMA_200'] = hist_daily['Close'].rolling(window=200).mean()
+            # --- ROW 2: Technical Indicators ---
+            with st.container(border=True):
+                st.markdown("#### ⚙️ Technical Analysis")
+                t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+                
                 sma_50 = hist_daily['SMA_50'].iloc[-1]
                 sma_200 = hist_daily['SMA_200'].iloc[-1]
-                
                 crossover = "🟢 Bullish" if sma_50 > sma_200 else "🔴 Bearish"
 
                 hist_weekly['WEMA_30'] = hist_weekly['Close'].ewm(span=30, adjust=False).mean()
@@ -163,18 +153,46 @@ if analyze_button:
                 dist_52w = ((current_price / high_52w) - 1) * 100
                 dist_ath = ((current_price / ath) - 1) * 100
 
-                st.markdown("**Returns**")
-                r_col1, r_col2, r_col3 = st.columns(3)
-                r_col1.metric("6M Return", f"{ret_6m:.2f}%" if ret_6m else "N/A")
-                r_col2.metric("12M Return", f"{ret_12m:.2f}%" if ret_12m else "N/A")
-                r_col3.metric("3Y Return", f"{ret_3y:.2f}%" if ret_3y else "N/A")
-                
-                st.markdown("**Technical Indicators**")
-                t_col1, t_col2, t_col3, t_col4 = st.columns(4)
-                t_col1.metric("DMA Crossover", crossover)
+                t_col1.metric("DMA Crossover (50 vs 200)", crossover)
                 t_col2.metric("Weekly Trend", wema_status)
-                t_col3.metric("vs 52W High", f"{dist_52w:.2f}%")
-                t_col4.metric("vs ATH", f"{dist_ath:.2f}%")
+                t_col3.metric("Distance from 52W High", f"{dist_52w:.2f}%")
+                t_col4.metric("Distance from ATH", f"{dist_ath:.2f}%")
 
-            except Exception as e:
-                st.error(f"⚠️ Technical analysis error: {e}")
+            # --- ROW 3: Shariah Compliance ---
+            with st.container(border=True):
+                st.markdown("#### ⚖️ AAOIFI Financial Ratios")
+                try:
+                    recent_bs = bs.iloc[:, 0] 
+                    recent_inc = financials.iloc[:, 0]
+                    
+                    total_assets = recent_bs.get("Total Assets", 0)
+                    total_debt = recent_bs.get("Total Debt", 0)
+                    cash_and_equiv = recent_bs.get("Cash And Cash Equivalents", 0)
+                    short_term_investments = recent_bs.get("Other Short Term Investments", 0)
+                    long_term_investments = recent_bs.get("Long Term Investments", 0)
+                    total_revenue = recent_inc.get("Total Revenue", 0)
+                    interest_income = recent_inc.get("Interest Income", 0)
+                    
+                    total_cash_investments = cash_and_equiv + short_term_investments
+                    interest_bearing_securities = short_term_investments + long_term_investments
+                    
+                    if total_assets > 0 and total_revenue > 0:
+                        debt_to_assets = (total_debt / total_assets) * 100
+                        cash_to_assets = (total_cash_investments / total_assets) * 100
+                        securities_to_assets = (interest_bearing_securities / total_assets) * 100
+                        interest_to_revenue = (interest_income / total_revenue) * 100
+                        
+                        s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+                        s_col1.metric("Debt / Assets (< 33%)", f"{debt_to_assets:.2f}%")
+                        s_col2.metric("Cash / Assets (< 33%)", f"{cash_to_assets:.2f}%")
+                        s_col3.metric("Securities / Assets (< 33%)", f"{securities_to_assets:.2f}%")
+                        s_col4.metric("Interest / Revenue (< 5%)", f"{interest_to_revenue:.2f}%")
+                                
+                        if debt_to_assets < 33 and cash_to_assets < 33 and securities_to_assets < 33 and interest_to_revenue < 5:
+                            st.success("🟢 **Verdict: COMPLIANT** (Passes all financial thresholds. Ensure sector compliance manually.)")
+                        else:
+                            st.error("🔴 **Verdict: NON-COMPLIANT** (Fails one or more financial thresholds.)")
+                    else:
+                        st.warning("Financial data (Assets/Revenue) is zero or missing.")
+                except Exception as e:
+                    st.error(f"⚠️ Error calculating ratios: {e}")
