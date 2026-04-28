@@ -85,28 +85,4 @@ if analyze_button:
             # Everything required for math fetched successfully!
             current_price = hist_daily['Close'].iloc[-1]
             
-            # Safely get the name, or default to the ticker symbol if info failed
-            company_name = info.get('longName', ticker_input) if isinstance(info, dict) else ticker_input
-            sector = info.get('sector', 'Unknown') if isinstance(info, dict) else 'Unknown'
-            industry = info.get('industry', 'Unknown') if isinstance(info, dict) else 'Unknown'
-            
-            st.subheader(f"{company_name} ({yf_ticker}) - Current Price: ₹{current_price:.2f}")
-            st.write(f"**Sector:** {sector} | **Industry:** {industry}")
-            
-            # --- STEP 1: Sector Screening ---
-            st.warning("**Step 1: Sector Screening (Manual Check Required)**\n\nEnsure this company does not derive its primary revenue from conventional banking, alcohol, gambling, or pork products.")
-            
-            # --- STEP 2: Financial Ratio Calculations ---
-            st.markdown("### Step 2: Financial Ratios (AAOIFI Standards)")
-            try:
-                recent_bs = bs.iloc[:, 0] 
-                recent_inc = financials.iloc[:, 0]
-                
-                total_assets = recent_bs.get("Total Assets", 0)
-                total_debt = recent_bs.get("Total Debt", 0)
-                cash_and_equiv = recent_bs.get("Cash And Cash Equivalents", 0)
-                short_term_investments = recent_bs.get("Other Short Term Investments", 0)
-                long_term_investments = recent_bs.get("Long Term Investments", 0)
-                
-                total_revenue = recent_inc.get("Total Revenue", 0)
-                interest_income = recent_inc.get("Interest Income", 0)
+            # Safely get the name, or default to the
